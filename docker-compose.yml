@@ -1,0 +1,109 @@
+x-app-env: &app-env
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  MINIO_SECURE: "false"
+  MINIO_BUCKET_ORIGINALS: ${MINIO_BUCKET_ORIGINALS:-originals}
+  MINIO_BUCKET_THUMBNAILS: ${MINIO_BUCKET_THUMBNAILS:-thumbnails}
+  THUMB_SIZES: "[1280,640,320]"
+  THUMB_QUALITY: "85"
+  MAX_UPLOAD_MB: "50"
+  JOB_TTL_HOURS: "24"
+  MAX_RETRIES: "3"
+
+services:
+  api:
+    build:
+      context: ./py-mono
+    command: uvicorn src.api:app --host 0.0.0.0 --port 8000
+    environment:
+      <<: *app-env
+    ports:
+      - "8000:8000"
+    networks:
+      - thumbnail
+    depends_on:
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./py-mono
+    command: celery -A src.celery_app.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      <<: *app-env
+    networks:
+      - thumbnail
+    depends_on:
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: thumbgen-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MC_HOST_local: "http://${MINIO_ROOT_USER:-minioadmin}:${MINIO_ROOT_PASSWORD:-minioadmin}@localhost:9000"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - thumbnail
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.6-alpine
+    container_name: thumbgen-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - thumbnail
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+networks:
+  thumbnail:
+    driver: bridge
+
+volumes:
+  minio-data:
+  redis-data:

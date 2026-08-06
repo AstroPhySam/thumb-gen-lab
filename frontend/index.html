@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Thumbnail Generator</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <main class="card">
+      <h1>Thumbnail Generator</h1>
+
+      <div id="drop-zone" class="drop-zone">
+        <p>Drag &amp; drop an image here, or</p>
+        <button type="button" id="pick-btn">Choose image</button>
+        <input type="file" id="file-input" accept="image/*" hidden />
+      </div>
+
+      <div id="preview-wrap" class="preview hidden">
+        <img id="preview" alt="selected image" />
+      </div>
+
+      <div id="status" class="status hidden">
+        <span id="status-badge" class="badge">QUEUED</span>
+        <span id="status-text"></span>
+      </div>
+
+      <div id="error" class="error hidden"></div>
+
+      <a id="download-link" class="btn hidden" target="_blank" rel="noopener"
+        >Download ZIP</a
+      >
+    </main>
+
+    <script src="js/app.js"></script>
+  </body>
+</html>

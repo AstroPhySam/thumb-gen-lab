@@ -1,0 +1,17 @@
+[project]
+name = "py-mono"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "celery>=5.6.3",
+    "fastapi[standard]>=0.141.1",
+    "minio>=7.2.20",
+    "pillow>=12.3.0",
+    "pydantic-settings>=2.14.2",
+    "redis>=8.1.0",
+]
+
+[tool.fastapi]
+entrypoint = "src.api:app"

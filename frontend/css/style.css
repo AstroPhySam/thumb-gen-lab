@@ -1,0 +1,150 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f4f6fb;
+  font-family:
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
+  color: #1f2937;
+}
+
+.card {
+  width: min(480px, 90vw);
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 28px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+}
+
+h1 {
+  font-size: 20px;
+  margin: 0 0 20px;
+  text-align: center;
+}
+
+.drop-zone {
+  border: 2px dashed #c7cdd8;
+  border-radius: 12px;
+  padding: 32px;
+  text-align: center;
+  color: #6b7280;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.drop-zone.dragover {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.drop-zone p {
+  margin: 0 0 12px;
+}
+
+button,
+.btn {
+  font: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  background: #2563eb;
+  color: #fff;
+  transition: background 0.15s;
+}
+
+button:hover:not(:disabled),
+.btn:hover:not(.hidden) {
+  background: #1d4ed8;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.preview {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.preview img {
+  max-width: 100%;
+  max-height: 220px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.status {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #374151;
+}
+
+.badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: #fff;
+  background: #6b7280;
+}
+
+.badge.queued {
+  background: #f59e0b;
+}
+
+.badge.processing {
+  background: #3b82f6;
+}
+
+.badge.done {
+  background: #10b981;
+}
+
+.badge.failed {
+  background: #ef4444;
+}
+
+.error {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 14px;
+}
+
+.btn {
+  display: block;
+  width: 100%;
+  margin-top: 18px;
+  text-align: center;
+  text-decoration: none;
+  background: #059669;
+}
+
+.btn:hover:not(.hidden) {
+  background: #047857;
+}
