@@ -8,10 +8,11 @@
     healthz_url: "http://{{ domain }}/healthz"
 
   tasks:
-    - name: Install Docker engine and compose plugin
+    - name: Install Docker engine, buildx and compose plugin
       ansible.builtin.apt:
         name:
           - docker.io
+          - docker-buildx
           - docker-compose-v2
         state: present
         update_cache: true
@@ -83,7 +84,9 @@
       ansible.builtin.uri:
         url: "{{ healthz_url }}"
         method: GET
+        status_code: 200
+        timeout: 5
       register: health
-      until: health.status == 200
-      retries: 30
-      delay: 10
+      until: health.status is defined and health.status == 200
+      retries: 24
+      delay: 5
