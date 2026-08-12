@@ -1,3 +1,7 @@
+{
+    auto_https disable_redirects
+}
+
 {$DOMAIN} {
     root * /srv/www
 
