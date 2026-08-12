@@ -75,9 +75,9 @@
       community.docker.docker_compose_v2:
         project_src: "{{ deploy_dir }}"
         files: "{{ compose_file }}"
-        build: changed
+        build: always
         state: present
-        pull: never
+        pull: missing
 
     - name: Wait for health endpoint
       ansible.builtin.uri:
