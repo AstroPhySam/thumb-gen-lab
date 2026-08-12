@@ -1,8 +1,8 @@
 {
-    auto_https disable_redirects
+    auto_https off
 }
 
-{$DOMAIN} {
+http://{$DOMAIN} {
     root * /srv/www
 
     handle /api/* {
