@@ -1,4 +1,4 @@
-const API = "http://localhost:8000";
+const API = window.API_BASE_URL ?? "";
 
 const dropZone = document.getElementById("drop-zone");
 const pickBtn = document.getElementById("pick-btn");

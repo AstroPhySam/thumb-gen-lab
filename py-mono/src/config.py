@@ -22,6 +22,8 @@ class Settings(BaseSettings):
 
     MAX_RETRIES: int = 3
 
+    CORS_ORIGINS: list[str] = ["*"]
+
     model_config = SettingsConfigDict(
         env_file=(str(PROJECT_ROOT / ".env"), ".env"),
         extra="ignore",

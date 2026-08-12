@@ -21,7 +21,9 @@ end-to-end with a ~0.6–0.8s upload-to-done turnaround.
 
 ```
 image-thumb-gen-lab/
-├── docker-compose.yml       # api + worker + minio + redis (volumes + network)
+├── docker-compose.dev.yml  # local dev: api + worker + minio + redis (ports published)
+├── docker-compose.prod.yml # production: + Caddy TLS, ports closed, secrets required
+├── Caddyfile               # reverse proxy + static frontend for the prod stack
 ├── .env                     # gitignored secrets (MinIO root user/password)
 ├── .env.example             # committed template
 ├── .gitignore
@@ -46,6 +48,8 @@ image-thumb-gen-lab/
 │           └── storage.py       # MinioStorage: buckets, originals, thumbnails
 └── frontend/                # vanilla HTML/CSS/JS test page (separate, no build step)
     ├── index.html
+    ├── config.js
+    ├── serve.py             # for simple development server to test locally
     ├── css/style.css
     └── js/app.js
 ```
@@ -167,18 +171,20 @@ A zero-build vanilla page served by any static server:
   (queued → processing → done/failed) live.
 - On `done`, a **Download ZIP** button appears and fetches the ZIP blob.
 
-API base URL is a single constant (`http://localhost:8000`) in `js/app.js`.
+API base URL is env-driven: `js/app.js` reads `window.API_BASE_URL` (see `config.js`).
+In production `config.js` ships with `""` (same-origin behind Caddy); in local dev the
+`serve.py` dev server injects it from `API_BASE_URL` (default `http://localhost:8000`).
 
 ---
 
-## How to run
+## How to run (local dev)
 
 ```powershell
 # 1. Start services (Docker Desktop running)
-docker compose up -d --build
+docker compose -f docker-compose.dev.yml up -d --build
 
-# 2. Serve the frontend
-python -m http.server 8080 --directory frontend   # open http://localhost:8080
+# 2. Serve the frontend (injects config.js from API_BASE_URL)
+python frontend/serve.py   # open http://localhost:8080
 
 # 3. (or) test via curl
 curl -F "file=@image.jpg" http://localhost:8000/api/upload
@@ -186,7 +192,15 @@ curl -N http://localhost:8000/api/events/<job_id>
 curl -o thumbs.zip http://localhost:8000/api/download/<job_id>
 ```
 
-Stop: `docker compose down` (keeps data); wipe: `docker compose down -v`.
+Production runs the same stack plus Caddy for TLS and static serving:
+
+```powershell
+$env:DOMAIN = "thumbs.example.com"
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Stop: `docker compose -f docker-compose.dev.yml down` (keeps data); wipe:
+`docker compose -f docker-compose.dev.yml down -v`.
 MinIO console: `http://localhost:9001` (login from `.env`, default `minioadmin`/`minioadmin`).
 
 ---

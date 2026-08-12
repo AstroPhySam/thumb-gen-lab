@@ -1,0 +1,13 @@
+{$DOMAIN} {
+    root * /srv/www
+
+    handle /api/* {
+        reverse_proxy api:8000
+    }
+
+    handle_path /healthz {
+        reverse_proxy api:8000
+    }
+
+    file_server
+}
