@@ -62,6 +62,26 @@ Run it from the Actions tab: choose `apply` or `destroy`. Destroy requires the
 `confirm` input to be exactly `DESTROY`. Non-secret vars (`region`,
 `instance_size`, …) use their Terraform defaults in CI.
 
+### Deploy workflow (`.github/workflows/deploy.yml`)
+
+Deploys the app stack to the instance with Ansible (Docker + compose build + up,
+then a health check). Triggered manually from the Actions tab. It reads the
+instance IP from Terraform state, so run `terraform apply` first.
+
+Additional repo **secrets / variables** for deploy:
+
+- `SSH_PRIVATE_KEY` (secret) — the **private** key matching `ssh_public_key_path`
+  (`~/.ssh/civo-thumbgen`). CI uses it to SSH into the instance as `root`.
+- `DOMAIN` (variable, optional) — the prod `.env` `DOMAIN` (domain or instance
+  IP). **If unset, the workflow falls back to the instance's public IP**, so
+  Caddy serves plain HTTP at `http://<ip>/` until you set a real domain.
+- `MINIO_ROOT_USER` (variable, optional — defaults to `minioadmin`) and
+  `MINIO_ROOT_PASSWORD` (secret, required) — prod MinIO credentials, rendered
+  into the server-side `.env` (never in the repo).
+
+Deploy target on the server: `/opt/thumbgen`. The repo's root `.env` (your Civo
+creds) is never copied to the server.
+
 ## 5. Ready
 
 ```powershell

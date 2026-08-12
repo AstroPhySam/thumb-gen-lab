@@ -1,0 +1,64 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Ansible deploy
+    runs-on: ubuntu-latest
+    env:
+      CIVO_TOKEN: ${{ secrets.CIVO_TOKEN }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      DOMAIN: ${{ vars.DOMAIN }}
+      MINIO_ROOT_USER: ${{ vars.MINIO_ROOT_USER }}
+      MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Read instance IP from Terraform state
+        id: tfout
+        working-directory: infra
+        run: |
+          terraform init -input=false > /dev/null
+          echo "ip=$(terraform output -raw instance_public_ip)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Ansible and collections
+        run: |
+          python3 -m pip install --quiet ansible-core
+          ansible-galaxy collection install -r ansible/requirements.yml
+
+      - name: Write SSH deploy key
+        run: |
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > "$RUNNER_TEMP/deploy_key"
+          chmod 600 "$RUNNER_TEMP/deploy_key"
+
+      - name: Write ephemeral inventory
+        run: |
+          mkdir -p "$RUNNER_TEMP/inventory"
+          printf '[thumbgen]\n%s ansible_user=root ansible_ssh_private_key_file=%s\n' \
+            "${{ steps.tfout.outputs.ip }}" "$RUNNER_TEMP/deploy_key" \
+            > "$RUNNER_TEMP/inventory/hosts"
+
+      - name: Run Ansible deploy
+        run: |
+          DOMAIN_FINAL="${DOMAIN:-${{ steps.tfout.outputs.ip }}}"
+          MINIO_USER_FINAL="${MINIO_ROOT_USER:-minioadmin}"
+          echo "Deploying with DOMAIN=$DOMAIN_FINAL"
+          ansible-playbook \
+            -i "$RUNNER_TEMP/inventory/hosts" \
+            -e "domain=$DOMAIN_FINAL" \
+            -e "minio_root_user=$MINIO_USER_FINAL" \
+            -e "minio_root_password=$MINIO_ROOT_PASSWORD" \
+            ansible/deploy.yml
