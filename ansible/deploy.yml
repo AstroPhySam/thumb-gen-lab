@@ -72,13 +72,25 @@
         dest: "{{ deploy_dir }}/.env"
         mode: "0600"
 
-    - name: Deploy stack (build + up)
+    - name: Deploy stack (build + up, force-recreate)
       community.docker.docker_compose_v2:
         project_src: "{{ deploy_dir }}"
         files: "{{ compose_file }}"
         build: always
         state: present
         pull: missing
+        recreate: always
+
+    - name: Show container status
+      ansible.builtin.command: "docker compose -f {{ compose_file }} ps"
+      args:
+        chdir: "{{ deploy_dir }}"
+      register: stack_status
+      changed_when: false
+
+    - name: Print container status
+      ansible.builtin.debug:
+        var: stack_status.stdout
 
     - name: Wait for health endpoint
       ansible.builtin.uri:
@@ -90,3 +102,22 @@
       until: health.status is defined and health.status == 200
       retries: 24
       delay: 5
+      ignore_errors: true
+
+    - name: Collect diagnostic logs
+      ansible.builtin.command: "docker compose -f {{ compose_file }} logs --tail=100"
+      args:
+        chdir: "{{ deploy_dir }}"
+      register: diag_logs
+      changed_when: false
+      when: health.status is defined and health.status != 200
+
+    - name: Print diagnostic logs
+      ansible.builtin.debug:
+        var: diag_logs.stdout
+      when: health.status is defined and health.status != 200
+
+    - name: Fail if stack is unhealthy
+      ansible.builtin.fail:
+        msg: "Health endpoint {{ healthz_url }} did not return 200"
+      when: health.status is defined and health.status != 200
