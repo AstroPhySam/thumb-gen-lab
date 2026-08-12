@@ -52,6 +52,8 @@ jobs:
             > "$RUNNER_TEMP/inventory/hosts"
 
       - name: Run Ansible deploy
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "false"
         run: |
           DOMAIN_FINAL="${DOMAIN:-${{ steps.tfout.outputs.ip }}}"
           MINIO_USER_FINAL="${MINIO_ROOT_USER:-minioadmin}"
