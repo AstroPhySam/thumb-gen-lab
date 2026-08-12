@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars (gitignored) and adjust. Secrets go in env vars,
+# not in this file.
+
+region              = "MUM1"
+instance_hostname   = "thumbgen"
+instance_size       = "g4s.small"
+disk_image_name     = "ubuntu-noble"
+
+# Absolute paths only - Terraform's file() does NOT expand ~, and neither do
+# the defaults in variables.tf (they are empty on purpose). Replace <you>.
+# Windows: C:/Users/<you>/.ssh/civo-thumbgen.pub   Linux/macOS: /home/<you>/.ssh/civo-thumbgen.pub
+ssh_public_key_path  = "C:/Users/<you>/.ssh/civo-thumbgen.pub"
+ssh_private_key_path = "C:/Users/<you>/.ssh/civo-thumbgen"

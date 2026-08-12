@@ -1,0 +1,75 @@
+name: Terraform
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "Terraform command to run"
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+      confirm:
+        description: "Type DESTROY to confirm terraform destroy"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    name: "terraform ${{ github.event.inputs.command }}"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    env:
+      CIVO_TOKEN: ${{ secrets.CIVO_TOKEN }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Guard destroy confirmation
+        if: github.event.inputs.command == 'destroy'
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "DESTROY" ]; then
+            echo "::error::Destroy requires confirm input to be 'DESTROY'"
+            exit 1
+          fi
+
+      - name: Write SSH public key
+        run: echo "${{ secrets.SSH_PUBLIC_KEY }}" > "$RUNNER_TEMP/civo-thumbgen.pub"
+
+      - name: Terraform fmt
+        run: terraform fmt -check
+        continue-on-error: false
+
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        if: github.event.inputs.command == 'plan'
+        run: terraform plan -var "ssh_public_key_path=$RUNNER_TEMP/civo-thumbgen.pub" -var "ssh_private_key_path=$RUNNER_TEMP/civo-thumbgen"
+
+      - name: Terraform apply
+        if: github.event.inputs.command == 'apply'
+        run: terraform apply -auto-approve -var "ssh_public_key_path=$RUNNER_TEMP/civo-thumbgen.pub" -var "ssh_private_key_path=$RUNNER_TEMP/civo-thumbgen"
+
+      - name: Terraform destroy
+        if: github.event.inputs.command == 'destroy'
+        run: terraform destroy -auto-approve -var "ssh_public_key_path=$RUNNER_TEMP/civo-thumbgen.pub" -var "ssh_private_key_path=$RUNNER_TEMP/civo-thumbgen"

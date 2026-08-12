@@ -1,1 +1,7 @@
 .env
+
+# Terraform
+infra/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
