@@ -5,6 +5,7 @@
   gather_facts: true
   vars:
     deploy_user: deploy
+    admin_user: admin
 
   handlers:
     - name: Restart sshd
@@ -27,6 +28,7 @@
   gather_facts: true
   vars:
     deploy_user: deploy
+    deploy_dir: /opt/thumbgen
 
   tasks:
     - name: Provision rootless Docker runtime

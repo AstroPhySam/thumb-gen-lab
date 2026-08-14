@@ -56,7 +56,8 @@ runs:
             "domain": os.environ.get("DOMAIN") or os.environ.get("INSTANCE_IP"),
             "minio_root_user": os.environ.get("MINIO_ROOT_USER") or "minioadmin",
             "minio_root_password": os.environ.get("MINIO_ROOT_PASSWORD", ""),
-            "deploy_pubkey": os.environ.get("SSH_PUBLIC_KEY", ""),
+            "deploy_pubkey": os.environ.get("DEPLOY_SSH_PUBLIC_KEY", ""),
+            "admin_pubkey": os.environ.get("SSH_PUBLIC_KEY", ""),
             "git_repo_token": os.environ.get("GIT_REPO_TOKEN", ""),
         }
         with open(os.path.join(os.environ["RUNNER_TEMP"], "extra_vars.json"), "w") as f:

@@ -16,7 +16,7 @@ jobs:
       MINIO_ROOT_USER: ${{ vars.MINIO_ROOT_USER }}
       MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
       GIT_REPO_TOKEN: ${{ secrets.GIT_REPO_TOKEN }}
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
 
     steps:
       - name: Checkout

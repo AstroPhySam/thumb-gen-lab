@@ -15,10 +15,26 @@
     key: "{{ deploy_pubkey }}"
   when: deploy_pubkey | default('') | length > 0
 
-- name: Grant deploy user passwordless sudo (needed for Ansible become)
+- name: Create dedicated admin user (locked password)
+  ansible.builtin.user:
+    name: "{{ admin_user }}"
+    state: present
+    create_home: true
+    shell: /bin/bash
+    password: "!"
+    comment: Thumbgen admin user
+
+- name: Install admin user SSH key
+  ansible.posix.authorized_key:
+    user: "{{ admin_user }}"
+    state: present
+    key: "{{ admin_pubkey }}"
+  when: admin_pubkey | default('') | length > 0
+
+- name: Grant admin user passwordless sudo (admin is the privileged identity)
   ansible.builtin.copy:
-    content: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL\n"
-    dest: "/etc/sudoers.d/{{ deploy_user }}"
+    content: "{{ admin_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    dest: "/etc/sudoers.d/{{ admin_user }}"
     mode: "0440"
     owner: root
     group: root

@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       ssh_user:
-        description: "root for first bootstrap, deploy once hardened"
+        description: "root for first bootstrap, admin after hardening"
         required: true
         default: root
         type: choice
         options:
           - root
-          - deploy
+          - admin
 
 permissions:
   contents: read
@@ -23,6 +23,7 @@ jobs:
       INSTANCE_IP: ${{ vars.INSTANCE_IP }}
       SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      DEPLOY_SSH_PUBLIC_KEY: ${{ secrets.DEPLOY_SSH_PUBLIC_KEY }}
 
     steps:
       - name: Checkout
