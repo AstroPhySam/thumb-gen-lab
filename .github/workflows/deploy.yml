@@ -28,6 +28,7 @@ jobs:
       MINIO_ROOT_USER: ${{ vars.MINIO_ROOT_USER }}
       MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
       SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+      GIT_REPO_TOKEN: ${{ secrets.GIT_REPO_TOKEN }}
       SSH_USER: ${{ inputs.ssh_user }}
 
     steps:
@@ -77,6 +78,7 @@ jobs:
               "minio_root_user": os.environ.get("MINIO_ROOT_USER") or "minioadmin",
               "minio_root_password": os.environ.get("MINIO_ROOT_PASSWORD", ""),
               "deploy_pubkey": os.environ.get("SSH_PUBLIC_KEY", ""),
+              "git_repo_token": os.environ.get("GIT_REPO_TOKEN", ""),
           }
           with open(os.path.join(os.environ["RUNNER_TEMP"], "extra_vars.json"), "w") as f:
               json.dump(extra, f)

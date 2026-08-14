@@ -1,45 +1,29 @@
 ---
-- name: Create deploy directory layout
+- name: Ensure deploy directory exists
   ansible.builtin.file:
-    path: "{{ item }}"
+    path: "{{ deploy_dir }}"
     state: directory
     mode: "0755"
-  loop:
-    - "{{ deploy_dir }}"
-    - "{{ deploy_dir }}/frontend"
-    - "{{ deploy_dir }}/py-mono"
 
-- name: Copy compose file and Caddyfile
-  ansible.builtin.copy:
-    src: "{{ item }}"
-    dest: "{{ deploy_dir }}/"
-    mode: "0644"
-  loop:
-    - ../docker-compose.prod.yml
-    - ../Caddyfile
+- name: Install git
+  ansible.builtin.apt:
+    name: git
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
 
-- name: Copy frontend
-  ansible.builtin.copy:
-    src: ../frontend/
-    dest: "{{ deploy_dir }}/frontend/"
-    mode: "0644"
+- name: Clone application repository
+  ansible.builtin.git:
+    repo: "{{ git_repo_clone }}"
+    dest: "{{ deploy_dir }}"
+    version: main
+    force: true
 
-- name: Copy py-mono build inputs
-  ansible.builtin.copy:
-    src: "{{ item.src }}"
-    dest: "{{ item.dest }}"
-    mode: "0644"
-  loop:
-    - {
-        src: ../py-mono/Dockerfile,
-        dest: "{{ deploy_dir }}/py-mono/Dockerfile",
-      }
-    - {
-        src: ../py-mono/pyproject.toml,
-        dest: "{{ deploy_dir }}/py-mono/pyproject.toml",
-      }
-    - { src: ../py-mono/uv.lock, dest: "{{ deploy_dir }}/py-mono/uv.lock" }
-    - { src: ../py-mono/src/, dest: "{{ deploy_dir }}/py-mono/src/" }
+- name: Strip token from origin remote
+  ansible.builtin.command: "git remote set-url origin {{ git_repo }}"
+  args:
+    chdir: "{{ deploy_dir }}"
+  when: git_repo_token | default('') | length > 0
 
 - name: Render production .env from secrets
   ansible.builtin.template:

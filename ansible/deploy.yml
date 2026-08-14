@@ -6,6 +6,11 @@
     deploy_dir: /opt/thumbgen
     compose_file: docker-compose.prod.yml
     healthz_url: "http://{{ domain }}/healthz"
+    git_repo: https://github.com/AstroPhySam/thumb-gen-lab.git
+    git_repo_clone: >-
+      {{ 'https://x-access-token:' ~ git_repo_token ~ '@github.com/AstroPhySam/thumb-gen-lab.git'
+         if (git_repo_token | default('') | length > 0)
+         else 'https://github.com/AstroPhySam/thumb-gen-lab.git' }}
 
   tasks:
     - name: Install and enable Docker runtime
@@ -24,7 +29,7 @@
   handlers:
     - name: Restart sshd
       ansible.builtin.systemd:
-        name: sshd
+        name: ssh
         state: restarted
 
     - name: Restart fail2ban
