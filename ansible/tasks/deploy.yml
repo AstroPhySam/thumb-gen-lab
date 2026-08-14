@@ -1,4 +1,15 @@
 ---
+- name: Check for existing git checkout
+  ansible.builtin.stat:
+    path: "{{ deploy_dir }}/.git"
+  register: deploy_git_dir
+
+- name: Remove stale deploy directory (from pre-git layout)
+  ansible.builtin.file:
+    path: "{{ deploy_dir }}"
+    state: absent
+  when: not deploy_git_dir.stat.exists
+
 - name: Ensure deploy directory exists
   ansible.builtin.file:
     path: "{{ deploy_dir }}"
