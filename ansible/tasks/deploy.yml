@@ -1,0 +1,98 @@
+---
+- name: Create deploy directory layout
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ deploy_dir }}"
+    - "{{ deploy_dir }}/frontend"
+    - "{{ deploy_dir }}/py-mono"
+
+- name: Copy compose file and Caddyfile
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ deploy_dir }}/"
+    mode: "0644"
+  loop:
+    - ../docker-compose.prod.yml
+    - ../Caddyfile
+
+- name: Copy frontend
+  ansible.builtin.copy:
+    src: ../frontend/
+    dest: "{{ deploy_dir }}/frontend/"
+    mode: "0644"
+
+- name: Copy py-mono build inputs
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - {
+        src: ../py-mono/Dockerfile,
+        dest: "{{ deploy_dir }}/py-mono/Dockerfile",
+      }
+    - {
+        src: ../py-mono/pyproject.toml,
+        dest: "{{ deploy_dir }}/py-mono/pyproject.toml",
+      }
+    - { src: ../py-mono/uv.lock, dest: "{{ deploy_dir }}/py-mono/uv.lock" }
+    - { src: ../py-mono/src/, dest: "{{ deploy_dir }}/py-mono/src/" }
+
+- name: Render production .env from secrets
+  ansible.builtin.template:
+    src: templates/env.j2
+    dest: "{{ deploy_dir }}/.env"
+    mode: "0600"
+
+- name: Deploy stack (build + up, force-recreate)
+  community.docker.docker_compose_v2:
+    project_src: "{{ deploy_dir }}"
+    files: "{{ compose_file }}"
+    build: always
+    state: present
+    pull: missing
+    recreate: always
+
+- name: Show container status
+  ansible.builtin.command: "docker compose -f {{ compose_file }} ps"
+  args:
+    chdir: "{{ deploy_dir }}"
+  register: stack_status
+  changed_when: false
+
+- name: Print container status
+  ansible.builtin.debug:
+    var: stack_status.stdout
+
+- name: Wait for health endpoint
+  ansible.builtin.uri:
+    url: "{{ healthz_url }}"
+    method: GET
+    status_code: 200
+    timeout: 5
+  register: health
+  until: health.status is defined and health.status == 200
+  retries: 24
+  delay: 5
+  ignore_errors: true
+
+- name: Collect diagnostic logs
+  ansible.builtin.command: "docker compose -f {{ compose_file }} logs --tail=100"
+  args:
+    chdir: "{{ deploy_dir }}"
+  register: diag_logs
+  changed_when: false
+  when: health.status is defined and health.status != 200
+
+- name: Print diagnostic logs
+  ansible.builtin.debug:
+    var: diag_logs.stdout
+  when: health.status is defined and health.status != 200
+
+- name: Fail if stack is unhealthy
+  ansible.builtin.fail:
+    msg: "Health endpoint {{ healthz_url }} did not return 200"
+  when: health.status is defined and health.status != 200

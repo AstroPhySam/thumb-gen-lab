@@ -1,0 +1,16 @@
+---
+- name: Install Docker engine, buildx and compose plugin
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - docker-buildx
+      - docker-compose-v2
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Ensure Docker service is running and enabled
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true

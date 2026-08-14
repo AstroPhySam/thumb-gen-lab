@@ -1,0 +1,58 @@
+---
+- name: Create dedicated deploy user (locked password, docker group)
+  ansible.builtin.user:
+    name: "{{ deploy_user }}"
+    state: present
+    create_home: true
+    shell: /bin/bash
+    groups: docker
+    append: true
+    password: "!"
+    comment: Thumbgen deploy user
+
+- name: Install deploy user SSH key
+  ansible.builtin.authorized_key:
+    user: "{{ deploy_user }}"
+    state: present
+    key: "{{ deploy_pubkey }}"
+  when: deploy_pubkey | default('') | length > 0
+
+- name: Grant deploy user passwordless sudo (needed for Ansible become)
+  ansible.builtin.copy:
+    content: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    dest: "/etc/sudoers.d/{{ deploy_user }}"
+    mode: "0440"
+    owner: root
+    group: root
+    validate: "/usr/sbin/visudo -cf %s"
+
+- name: Deploy sshd hardening drop-in
+  ansible.builtin.copy:
+    src: templates/sshd-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/00-thumbgen-hardening.conf
+    mode: "0644"
+    owner: root
+    group: root
+  notify: Restart sshd
+
+- name: Install fail2ban
+  ansible.builtin.apt:
+    name: fail2ban
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Deploy fail2ban sshd jail config
+  ansible.builtin.copy:
+    src: templates/fail2ban-local.j2
+    dest: /etc/fail2ban/jail.d/00-thumbgen-local.conf
+    mode: "0644"
+    owner: root
+    group: root
+  notify: Restart fail2ban
+
+- name: Ensure fail2ban is running and enabled
+  ansible.builtin.systemd:
+    name: fail2ban
+    state: started
+    enabled: true

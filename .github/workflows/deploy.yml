@@ -2,6 +2,18 @@ name: Deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      ssh_user:
+        description: >-
+          SSH user Ansible connects as. Use 'root' for the very first run
+          (bootstraps the dedicated deploy user + sshd hardening), then switch
+          to 'deploy' for all later deploys.
+        required: false
+        default: root
+        type: choice
+        options:
+          - root
+          - deploy
 
 permissions:
   contents: read
@@ -11,28 +23,22 @@ jobs:
     name: Ansible deploy
     runs-on: ubuntu-latest
     env:
-      CIVO_TOKEN: ${{ secrets.CIVO_TOKEN }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      INSTANCE_IP: ${{ vars.INSTANCE_IP }}
       DOMAIN: ${{ vars.DOMAIN }}
       MINIO_ROOT_USER: ${{ vars.MINIO_ROOT_USER }}
       MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
+      SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+      SSH_USER: ${{ inputs.ssh_user }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Read instance IP from Terraform state
-        id: tfout
-        working-directory: infra
+      - name: Fail if instance IP is not set
+        if: env.INSTANCE_IP == ''
         run: |
-          terraform init -input=false > /dev/null
-          echo "ip=$(terraform output -raw instance_public_ip)" >> "$GITHUB_OUTPUT"
+          echo "::error::INSTANCE_IP is not set. Run 'Terraform Apply' first so it records the instance IP."
+          exit 1
 
       - name: Install Ansible and collections
         run: |
@@ -44,18 +50,21 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > "$RUNNER_TEMP/deploy_key"
           chmod 600 "$RUNNER_TEMP/deploy_key"
 
+      - name: Pin instance host key (host_key_checking is enabled)
+        run: |
+          mkdir -p "$HOME/.ssh"
+          ssh-keyscan -H "$INSTANCE_IP" >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
+
       - name: Write ephemeral inventory
         run: |
           mkdir -p "$RUNNER_TEMP/inventory"
-          printf '[thumbgen]\n%s ansible_user=root ansible_ssh_private_key_file=%s\n' \
-            "${{ steps.tfout.outputs.ip }}" "$RUNNER_TEMP/deploy_key" \
+          printf '[thumbgen]\n%s ansible_user=%s ansible_ssh_private_key_file=%s\n' \
+            "$INSTANCE_IP" "$SSH_USER" "$RUNNER_TEMP/deploy_key" \
             > "$RUNNER_TEMP/inventory/hosts"
 
       - name: Run Ansible deploy
-        env:
-          ANSIBLE_HOST_KEY_CHECKING: "false"
         run: |
-          DOMAIN_FINAL="${DOMAIN:-${{ steps.tfout.outputs.ip }}}"
+          DOMAIN_FINAL="${DOMAIN:-$INSTANCE_IP}"
           MINIO_USER_FINAL="${MINIO_ROOT_USER:-minioadmin}"
           echo "Deploying with DOMAIN=$DOMAIN_FINAL"
           ansible-playbook \
@@ -63,4 +72,5 @@ jobs:
             -e "domain=$DOMAIN_FINAL" \
             -e "minio_root_user=$MINIO_USER_FINAL" \
             -e "minio_root_password=$MINIO_ROOT_PASSWORD" \
+            -e "deploy_pubkey=$SSH_PUBLIC_KEY" \
             ansible/deploy.yml

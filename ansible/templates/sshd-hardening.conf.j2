@@ -1,0 +1,8 @@
+# Managed by Ansible — thumbgen host hardening (idempotent).
+# Loaded via Include /etc/ssh/sshd_config.d/*.conf in Ubuntu's sshd_config.
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+MaxAuthTries 3
+AllowUsers deploy
