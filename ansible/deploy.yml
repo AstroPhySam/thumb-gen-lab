@@ -1,7 +1,6 @@
 ---
 - name: Deploy thumbgen stack
   hosts: thumbgen
-  become: true
   vars:
     deploy_dir: /opt/thumbgen
     compose_file: docker-compose.prod.yml

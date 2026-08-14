@@ -1,12 +1,10 @@
 ---
-- name: Create dedicated deploy user (locked password, docker group)
+- name: Create dedicated deploy user (locked password)
   ansible.builtin.user:
     name: "{{ deploy_user }}"
     state: present
     create_home: true
     shell: /bin/bash
-    groups: docker
-    append: true
     password: "!"
     comment: Thumbgen deploy user
 

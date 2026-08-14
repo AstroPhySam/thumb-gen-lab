@@ -103,15 +103,12 @@ The workflow takes an `ssh_user` **input** (default `root`): see
 Deploy target on the server: `/opt/thumbgen`. The repo's root `.env` (your Civo
 creds) is never copied to the server.
 
-### Host hardening (applied by the deploy playbook)
+### Host hardening (applied by the server-setup playbook)
 
-On every deploy, after the stack comes up, the playbook hardens the host
-(idempotent):
+The `server-setup` workflow hardens the host (idempotent):
 
-- Creates a dedicated non-root user **`deploy`** (locked password, member of
-  the `docker` group) and grants it passwordless sudo (needed for Ansible
-  `become`). Sudo + docker-group membership is root-equivalent — this keeps
-  day-to-day SSH off `root` without introducing a second failure mode.
+- Creates a dedicated non-root user **`deploy`** (locked password) and grants
+  it passwordless sudo (needed for Ansible `become`).
 - Installs `SSH_PUBLIC_KEY` into `/home/deploy/.ssh/authorized_keys`.
 - Writes `/etc/ssh/sshd_config.d/00-thumbgen-hardening.conf`:
   `PermitRootLogin no`, `PasswordAuthentication no`, `KbdInteractiveAuthentication no`,
@@ -119,6 +116,25 @@ On every deploy, after the stack comes up, the playbook hardens the host
 - Installs **fail2ban** with an sshd jail (ban 10m after 5 failures) — SSH stays
   open to `0.0.0.0/0` because GitHub Actions runners use dynamic IPs, so IP
   allowlisting would break CI; fail2ban + key-only auth is the mitigation.
+
+### Rootless Docker (set up by the server-setup playbook)
+
+The Docker engine runs **rootless** for the `deploy` user — no root daemon:
+
+- Rootless `dockerd` runs as `deploy` via a systemd user unit
+  (`systemctl --user docker`), kept alive across reboots with
+  `loginctl enable-linger deploy`. Socket: `/run/user/<uid>/docker.sock`.
+- Rootful `docker.service`/`docker.socket` are stopped and disabled.
+- Kernel tuning applied and persisted in `/etc/sysctl.d/99-thumbgen-rootless.conf`:
+  `kernel.unprivileged_userns_clone=1` and
+  `net.ipv4.ip_unprivileged_port_start=80` (lets rootless Caddy publish 80/443).
+- Storage uses `fuse-overlayfs` (`~/.config/docker/daemon.json`); container
+  images and volumes live under the `deploy` user's home, so no host-level
+  permission boundaries apply. The app containers themselves also run as an
+  unprivileged `appuser` (UID 10001) baked into the image.
+
+The deploy playbook talks to the rootless daemon by setting
+`DOCKER_HOST=unix:///run/user/<uid>/docker.sock` for all `docker` commands.
 
 ### First deploy (bootstrap) — one-time migration to `deploy`
 

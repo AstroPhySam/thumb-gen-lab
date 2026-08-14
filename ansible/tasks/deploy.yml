@@ -8,13 +8,26 @@
   ansible.builtin.file:
     path: "{{ deploy_dir }}"
     state: absent
+  become: true
   when: not deploy_git_dir.stat.exists
 
-- name: Ensure deploy directory exists
+- name: Ensure deploy directory exists and is owned by deploy user
   ansible.builtin.file:
     path: "{{ deploy_dir }}"
     state: directory
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
     mode: "0755"
+  become: true
+
+- name: Take ownership of existing deploy directory (migration from root)
+  ansible.builtin.file:
+    path: "{{ deploy_dir }}"
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+    recurse: true
+  become: true
+  when: deploy_git_dir.stat.exists
 
 - name: Install git
   ansible.builtin.apt:
@@ -22,6 +35,16 @@
     state: present
     update_cache: true
     cache_valid_time: 3600
+  become: true
+
+- name: Resolve deploy user UID for rootless Docker socket
+  ansible.builtin.command: id -u
+  changed_when: false
+  register: deploy_uid_cmd
+
+- name: Set rootless Docker host fact
+  ansible.builtin.set_fact:
+    docker_host: "unix:///run/user/{{ deploy_uid_cmd.stdout }}/docker.sock"
 
 - name: Clone application repository
   ansible.builtin.git:
@@ -42,7 +65,7 @@
     dest: "{{ deploy_dir }}/.env"
     mode: "0600"
 
-- name: Deploy stack (build + up, force-recreate)
+- name: Deploy stack via rootless Docker (build + up, force-recreate)
   community.docker.docker_compose_v2:
     project_src: "{{ deploy_dir }}"
     files: "{{ compose_file }}"
@@ -50,11 +73,15 @@
     state: present
     pull: missing
     recreate: always
+  environment:
+    DOCKER_HOST: "{{ docker_host }}"
 
 - name: Show container status
   ansible.builtin.command: "docker compose -f {{ compose_file }} ps"
   args:
     chdir: "{{ deploy_dir }}"
+  environment:
+    DOCKER_HOST: "{{ docker_host }}"
   register: stack_status
   changed_when: false
 
@@ -78,6 +105,8 @@
   ansible.builtin.command: "docker compose -f {{ compose_file }} logs --tail=100"
   args:
     chdir: "{{ deploy_dir }}"
+  environment:
+    DOCKER_HOST: "{{ docker_host }}"
   register: diag_logs
   changed_when: false
   when: health.status is defined and health.status != 200

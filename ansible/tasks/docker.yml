@@ -1,16 +1,189 @@
 ---
-- name: Install Docker engine, buildx and compose plugin
+- name: Install rootless Docker packages
   ansible.builtin.apt:
     name:
       - docker.io
       - docker-buildx
       - docker-compose-v2
+      - rootlesskit
+      - slirp4netns
+      - uidmap
+      - fuse-overlayfs
+      - dbus-user-session
     state: present
     update_cache: true
     cache_valid_time: 3600
 
-- name: Ensure Docker service is running and enabled
+- name: Stop and disable rootful Docker service
   ansible.builtin.systemd:
     name: docker
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Stop and disable rootful Docker socket
+  ansible.builtin.systemd:
+    name: docker.socket
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Configure subordinate UID range for deploy user
+  ansible.builtin.lineinfile:
+    path: /etc/subuid
+    line: "{{ deploy_user }}:100000:65536"
+    regexp: "^{{ deploy_user }}:"
+    create: true
+
+- name: Configure subordinate GID range for deploy user
+  ansible.builtin.lineinfile:
+    path: /etc/subgid
+    line: "{{ deploy_user }}:100000:65536"
+    regexp: "^{{ deploy_user }}:"
+    create: true
+
+- name: Enable unprivileged user namespaces
+  ansible.builtin.sysctl:
+    name: kernel.unprivileged_userns_clone
+    value: "1"
+    sysctl_set: true
+    sysctl_file: /etc/sysctl.d/99-thumbgen-rootless.conf
+
+- name: Allow unprivileged binding of ports >= 80 (rootless Caddy 80/443)
+  ansible.builtin.sysctl:
+    name: net.ipv4.ip_unprivileged_port_start
+    value: "80"
+    sysctl_set: true
+    sysctl_file: /etc/sysctl.d/99-thumbgen-rootless.conf
+
+- name: Resolve deploy user UID
+  ansible.builtin.command: "id -u {{ deploy_user }}"
+  register: deploy_uid_cmd
+  changed_when: false
+
+- name: Resolve deploy user home directory
+  ansible.builtin.command: "getent passwd {{ deploy_user }} | cut -d: -f6"
+  register: deploy_home_cmd
+  changed_when: false
+
+- name: Set deploy user facts
+  ansible.builtin.set_fact:
+    deploy_uid: "{{ deploy_uid_cmd.stdout }}"
+    deploy_home: "{{ deploy_home_cmd.stdout }}"
+
+- name: Ensure XDG runtime directory exists for deploy user
+  ansible.builtin.file:
+    path: "/run/user/{{ deploy_uid }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0700"
+
+- name: Enable linger for deploy user (user manager runs at boot)
+  ansible.builtin.command: "loginctl enable-linger {{ deploy_user }}"
+  changed_when: false
+
+- name: Start the systemd user manager for deploy user
+  ansible.builtin.systemd:
+    name: "user@{{ deploy_uid }}.service"
     state: started
     enabled: true
+
+- name: Wait for deploy user systemd bus
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      export XDG_RUNTIME_DIR=/run/user/{{ deploy_uid }}
+      export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ deploy_uid }}/bus
+      systemctl --user show-environment
+  become: true
+  become_user: "{{ deploy_user }}"
+  register: bus_check
+  changed_when: false
+  until: bus_check.rc == 0
+  retries: 10
+  delay: 3
+
+- name: Create rootless docker config directory
+  ansible.builtin.file:
+    path: "{{ deploy_home }}/.config/docker"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0755"
+
+- name: Configure rootless dockerd storage driver (fuse-overlayfs)
+  ansible.builtin.copy:
+    content: |
+      {
+        "storage-driver": "fuse-overlayfs"
+      }
+    dest: "{{ deploy_home }}/.config/docker/daemon.json"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0644"
+
+- name: Locate dockerd-rootless.sh helper
+  ansible.builtin.find:
+    paths:
+      - /usr/share/docker.io/contrib
+      - /usr/lib/docker
+    patterns: dockerd-rootless.sh
+    file_type: file
+  register: rootless_scripts
+
+- name: Set rootless helper directory fact
+  ansible.builtin.set_fact:
+    rootless_dir: "{{ rootless_scripts.files[0].path | dirname }}"
+
+- name: Link rootless Docker helpers and client into a common PATH dir
+  ansible.builtin.file:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    state: link
+    force: true
+  loop:
+    - src: "{{ rootless_dir }}/dockerd-rootless.sh"
+      dest: /usr/local/bin/dockerd-rootless.sh
+    - src: "{{ rootless_dir }}/dockerd-rootless-setuptool.sh"
+      dest: /usr/local/bin/dockerd-rootless-setuptool.sh
+    - src: /usr/bin/docker
+      dest: /usr/local/bin/docker
+
+- name: Install rootless Docker daemon for deploy user
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      export HOME={{ deploy_home }}
+      export XDG_RUNTIME_DIR=/run/user/{{ deploy_uid }}
+      export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ deploy_uid }}/bus
+      dockerd-rootless-setuptool.sh install --force
+  become: true
+  become_user: "{{ deploy_user }}"
+  environment:
+    PATH: /usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    HOME: "{{ deploy_home }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ deploy_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ deploy_uid }}/bus"
+  register: rootless_install
+
+- name: Wait for rootless Docker socket
+  ansible.builtin.wait_for:
+    path: "/run/user/{{ deploy_uid }}/docker.sock"
+    timeout: 60
+
+- name: Verify rootless Docker server is reachable
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      export DOCKER_HOST=unix:///run/user/{{ deploy_uid }}/docker.sock
+      export XDG_RUNTIME_DIR=/run/user/{{ deploy_uid }}
+      docker version --format '{{ '{{' }}.Server.Version{{ '}}' }}'
+  become: true
+  become_user: "{{ deploy_user }}"
+  changed_when: false
+  register: rootless_version
+
+- name: Print rootless Docker server version
+  ansible.builtin.debug:
+    msg: "Rootless Docker server version: {{ rootless_version.stdout }}"

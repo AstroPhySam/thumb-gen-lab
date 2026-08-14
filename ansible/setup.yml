@@ -1,12 +1,4 @@
 ---
-- name: Install and enable Docker runtime
-  hosts: thumbgen
-  become: true
-  gather_facts: true
-  tasks:
-    - name: Install and enable Docker runtime
-      ansible.builtin.include_tasks: tasks/docker.yml
-
 - name: Harden host — user management, SSH and fail2ban
   hosts: thumbgen
   become: true
@@ -28,3 +20,14 @@
   tasks:
     - name: Harden user management, SSH and fail2ban
       ansible.builtin.include_tasks: tasks/harden.yml
+
+- name: Provision rootless Docker runtime
+  hosts: thumbgen
+  become: true
+  gather_facts: true
+  vars:
+    deploy_user: deploy
+
+  tasks:
+    - name: Provision rootless Docker runtime
+      ansible.builtin.include_tasks: tasks/docker.yml
