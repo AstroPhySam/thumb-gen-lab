@@ -41,7 +41,7 @@ jobs:
           exit 1
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v9
+        uses: astral-sh/setup-uv@v9.0.0
 
       - name: Install Ansible in a dedicated venv
         run: |
