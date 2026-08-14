@@ -67,27 +67,35 @@ jobs:
             "$INSTANCE_IP" "$SSH_USER" "$RUNNER_TEMP/deploy_key" \
             > "$RUNNER_TEMP/inventory/hosts"
 
+      - name: Write Ansible extra vars (JSON, safe for spaces/special chars)
+        run: |
+          python3 - <<'EOF'
+          import json
+          import os
+          extra = {
+              "domain": os.environ.get("DOMAIN") or os.environ.get("INSTANCE_IP"),
+              "minio_root_user": os.environ.get("MINIO_ROOT_USER") or "minioadmin",
+              "minio_root_password": os.environ.get("MINIO_ROOT_PASSWORD", ""),
+              "deploy_pubkey": os.environ.get("SSH_PUBLIC_KEY", ""),
+          }
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "extra_vars.json"), "w") as f:
+              json.dump(extra, f)
+          EOF
+
       - name: Syntax-check playbook (fail fast before any SSH)
         run: |
           DOMAIN_FINAL="${DOMAIN:-$INSTANCE_IP}"
-          MINIO_USER_FINAL="${MINIO_ROOT_USER:-minioadmin}"
+          echo "Deploying with DOMAIN=$DOMAIN_FINAL"
           ansible-playbook \
             -i "$RUNNER_TEMP/inventory/hosts" \
-            -e "domain=$DOMAIN_FINAL" \
-            -e "minio_root_user=$MINIO_USER_FINAL" \
-            -e "minio_root_password=$MINIO_ROOT_PASSWORD" \
-            -e "deploy_pubkey=$SSH_PUBLIC_KEY" \
+            -e "@$RUNNER_TEMP/extra_vars.json" \
             --syntax-check ansible/deploy.yml
 
       - name: Run Ansible deploy
         run: |
           DOMAIN_FINAL="${DOMAIN:-$INSTANCE_IP}"
-          MINIO_USER_FINAL="${MINIO_ROOT_USER:-minioadmin}"
           echo "Deploying with DOMAIN=$DOMAIN_FINAL"
           ansible-playbook \
             -i "$RUNNER_TEMP/inventory/hosts" \
-            -e "domain=$DOMAIN_FINAL" \
-            -e "minio_root_user=$MINIO_USER_FINAL" \
-            -e "minio_root_password=$MINIO_ROOT_PASSWORD" \
-            -e "deploy_pubkey=$SSH_PUBLIC_KEY" \
+            -e "@$RUNNER_TEMP/extra_vars.json" \
             ansible/deploy.yml

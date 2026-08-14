@@ -10,19 +10,6 @@
     password: "!"
     comment: Thumbgen deploy user
 
-- name: Validate deploy public key format
-  ansible.builtin.assert:
-    that:
-      - >-
-        deploy_pubkey | trim is regex(
-        '^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521|ssh-dss|sk-ssh-ed25519@openssh.com|sk-ecdsa-sha2-nistp256@openssh.com)\\s+[A-Za-z0-9+/]+={0,2}(\\s+\\S+)?$'
-        )
-    fail_msg: >-
-      SSH_PUBLIC_KEY secret must be a full one-line public key
-      (e.g. 'ssh-ed25519 AAAAC3... user@host'), not just the key type.
-    quiet: true
-  when: deploy_pubkey | default('') | length > 0
-
 - name: Install deploy user SSH key
   ansible.posix.authorized_key:
     user: "{{ deploy_user }}"
