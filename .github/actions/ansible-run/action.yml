@@ -1,0 +1,84 @@
+name: Run Ansible playbook
+description: >-
+  Prepares Ansible tooling (uv + dedicated venv + collections) and runs a
+  playbook against the thumbgen instance. Reads instance details and secrets
+  from the calling job's environment variables.
+
+inputs:
+  playbook:
+    description: Path to the playbook to run against the instance
+    required: true
+  ssh_user:
+    description: SSH user to connect as (root for setup, deploy for deployments)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Setup uv
+      uses: astral-sh/setup-uv@v9.0.0
+
+    - name: Install Ansible in a dedicated venv
+      shell: bash
+      run: |
+        uv venv "$RUNNER_TEMP/ansible-venv"
+        uv pip install --python "$RUNNER_TEMP/ansible-venv" "ansible-core==2.17.*"
+        "$RUNNER_TEMP/ansible-venv/bin/ansible-galaxy" collection install -r ansible/requirements.yml
+        echo "$RUNNER_TEMP/ansible-venv/bin" >> "$GITHUB_PATH"
+
+    - name: Write SSH deploy key
+      shell: bash
+      run: |
+        echo "$SSH_PRIVATE_KEY" > "$RUNNER_TEMP/deploy_key"
+        chmod 600 "$RUNNER_TEMP/deploy_key"
+
+    - name: Pin instance host key (host_key_checking is enabled)
+      shell: bash
+      run: |
+        mkdir -p "$HOME/.ssh"
+        ssh-keyscan -H "$INSTANCE_IP" >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
+
+    - name: Write ephemeral inventory
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/inventory"
+        printf '[thumbgen]\n%s ansible_user=%s ansible_ssh_private_key_file=%s\n' \
+          "$INSTANCE_IP" "${{ inputs.ssh_user }}" "$RUNNER_TEMP/deploy_key" \
+          > "$RUNNER_TEMP/inventory/hosts"
+
+    - name: Write Ansible extra vars (JSON, safe for spaces/special chars)
+      shell: bash
+      run: |
+        python3 - <<'EOF'
+        import json
+        import os
+        extra = {
+            "domain": os.environ.get("DOMAIN") or os.environ.get("INSTANCE_IP"),
+            "minio_root_user": os.environ.get("MINIO_ROOT_USER") or "minioadmin",
+            "minio_root_password": os.environ.get("MINIO_ROOT_PASSWORD", ""),
+            "deploy_pubkey": os.environ.get("SSH_PUBLIC_KEY", ""),
+            "git_repo_token": os.environ.get("GIT_REPO_TOKEN", ""),
+        }
+        with open(os.path.join(os.environ["RUNNER_TEMP"], "extra_vars.json"), "w") as f:
+            json.dump(extra, f)
+        EOF
+
+    - name: Syntax-check playbook (fail fast before any SSH)
+      shell: bash
+      run: |
+        DOMAIN_FINAL="${DOMAIN:-$INSTANCE_IP}"
+        echo "Running ${{ inputs.playbook }} with DOMAIN=$DOMAIN_FINAL"
+        ansible-playbook \
+          -i "$RUNNER_TEMP/inventory/hosts" \
+          -e "@$RUNNER_TEMP/extra_vars.json" \
+          --syntax-check "${{ inputs.playbook }}"
+
+    - name: Run Ansible playbook
+      shell: bash
+      run: |
+        DOMAIN_FINAL="${DOMAIN:-$INSTANCE_IP}"
+        echo "Running ${{ inputs.playbook }} with DOMAIN=$DOMAIN_FINAL"
+        ansible-playbook \
+          -i "$RUNNER_TEMP/inventory/hosts" \
+          -e "@$RUNNER_TEMP/extra_vars.json" \
+          "${{ inputs.playbook }}"

@@ -1,0 +1,32 @@
+name: Server Setup
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    name: Provision and harden server
+    runs-on: ubuntu-latest
+    env:
+      INSTANCE_IP: ${{ vars.INSTANCE_IP }}
+      SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fail if instance IP is not set
+        if: env.INSTANCE_IP == ''
+        run: |
+          echo "::error::INSTANCE_IP is not set. Run 'Terraform Apply' first so it records the instance IP."
+          exit 1
+
+      - name: Run Ansible (setup)
+        uses: ./.github/actions/ansible-run
+        with:
+          playbook: ansible/setup.yml
+          ssh_user: root

@@ -1,0 +1,35 @@
+name: App Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy application stack
+    runs-on: ubuntu-latest
+    env:
+      INSTANCE_IP: ${{ vars.INSTANCE_IP }}
+      DOMAIN: ${{ vars.DOMAIN }}
+      MINIO_ROOT_USER: ${{ vars.MINIO_ROOT_USER }}
+      MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
+      GIT_REPO_TOKEN: ${{ secrets.GIT_REPO_TOKEN }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fail if instance IP is not set
+        if: env.INSTANCE_IP == ''
+        run: |
+          echo "::error::INSTANCE_IP is not set. Run 'Terraform Apply' first so it records the instance IP."
+          exit 1
+
+      - name: Run Ansible (deploy)
+        uses: ./.github/actions/ansible-run
+        with:
+          playbook: ansible/deploy.yml
+          ssh_user: deploy

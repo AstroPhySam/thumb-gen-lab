@@ -13,30 +13,5 @@
          else 'https://github.com/AstroPhySam/thumb-gen-lab.git' }}
 
   tasks:
-    - name: Install and enable Docker runtime
-      ansible.builtin.include_tasks: tasks/docker.yml
-
     - name: Deploy the thumbgen application stack
       ansible.builtin.include_tasks: tasks/deploy.yml
-
-- name: Harden host — user management, SSH and fail2ban
-  hosts: thumbgen
-  become: true
-  gather_facts: true
-  vars:
-    deploy_user: deploy
-
-  handlers:
-    - name: Restart sshd
-      ansible.builtin.systemd:
-        name: ssh
-        state: restarted
-
-    - name: Restart fail2ban
-      ansible.builtin.systemd:
-        name: fail2ban
-        state: restarted
-
-  tasks:
-    - name: Harden user management, SSH and fail2ban
-      ansible.builtin.include_tasks: tasks/harden.yml
