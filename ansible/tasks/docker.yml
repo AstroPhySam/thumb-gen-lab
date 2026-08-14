@@ -123,32 +123,21 @@
     group: "{{ deploy_user }}"
     mode: "0644"
 
-- name: Locate dockerd-rootless.sh helper
-  ansible.builtin.find:
-    paths:
-      - /usr/share/docker.io/contrib
-      - /usr/lib/docker
-    patterns: dockerd-rootless.sh
-    file_type: file
-  register: rootless_scripts
+- name: Download rootless Docker helper scripts (moby v24.0.7)
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/moby/moby/v24.0.7/contrib/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    mode: "0755"
+  loop:
+    - dockerd-rootless.sh
+    - dockerd-rootless-setuptool.sh
 
-- name: Set rootless helper directory fact
-  ansible.builtin.set_fact:
-    rootless_dir: "{{ rootless_scripts.files[0].path | dirname }}"
-
-- name: Link rootless Docker helpers and client into a common PATH dir
+- name: Link docker client into the rootless helper PATH dir
   ansible.builtin.file:
-    src: "{{ item.src }}"
-    dest: "{{ item.dest }}"
+    src: /usr/bin/docker
+    dest: /usr/local/bin/docker
     state: link
     force: true
-  loop:
-    - src: "{{ rootless_dir }}/dockerd-rootless.sh"
-      dest: /usr/local/bin/dockerd-rootless.sh
-    - src: "{{ rootless_dir }}/dockerd-rootless-setuptool.sh"
-      dest: /usr/local/bin/dockerd-rootless-setuptool.sh
-    - src: /usr/bin/docker
-      dest: /usr/local/bin/docker
 
 - name: Install rootless Docker daemon for deploy user
   ansible.builtin.shell:
