@@ -40,10 +40,15 @@ jobs:
           echo "::error::INSTANCE_IP is not set. Run 'Terraform Apply' first so it records the instance IP."
           exit 1
 
-      - name: Install Ansible and collections
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v9
+
+      - name: Install Ansible in a dedicated venv
         run: |
-          python3 -m pip install --quiet ansible-core
-          ansible-galaxy collection install -r ansible/requirements.yml
+          uv venv "$RUNNER_TEMP/ansible-venv"
+          uv pip install --python "$RUNNER_TEMP/ansible-venv" "ansible-core==2.17.*"
+          "$RUNNER_TEMP/ansible-venv/bin/ansible-galaxy" collection install -r ansible/requirements.yml
+          echo "$RUNNER_TEMP/ansible-venv/bin" >> "$GITHUB_PATH"
 
       - name: Write SSH deploy key
         run: |
@@ -61,6 +66,18 @@ jobs:
           printf '[thumbgen]\n%s ansible_user=%s ansible_ssh_private_key_file=%s\n' \
             "$INSTANCE_IP" "$SSH_USER" "$RUNNER_TEMP/deploy_key" \
             > "$RUNNER_TEMP/inventory/hosts"
+
+      - name: Syntax-check playbook (fail fast before any SSH)
+        run: |
+          DOMAIN_FINAL="${DOMAIN:-$INSTANCE_IP}"
+          MINIO_USER_FINAL="${MINIO_ROOT_USER:-minioadmin}"
+          ansible-playbook \
+            -i "$RUNNER_TEMP/inventory/hosts" \
+            -e "domain=$DOMAIN_FINAL" \
+            -e "minio_root_user=$MINIO_USER_FINAL" \
+            -e "minio_root_password=$MINIO_ROOT_PASSWORD" \
+            -e "deploy_pubkey=$SSH_PUBLIC_KEY" \
+            --syntax-check ansible/deploy.yml
 
       - name: Run Ansible deploy
         run: |

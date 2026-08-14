@@ -11,7 +11,7 @@
     comment: Thumbgen deploy user
 
 - name: Install deploy user SSH key
-  ansible.builtin.authorized_key:
+  ansible.posix.authorized_key:
     user: "{{ deploy_user }}"
     state: present
     key: "{{ deploy_pubkey }}"
