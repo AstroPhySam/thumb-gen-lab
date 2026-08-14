@@ -92,7 +92,7 @@
 - name: Wait for deploy user systemd bus
   ansible.builtin.shell:
     cmd: |
-      set -euo pipefail
+      set -eu
       export XDG_RUNTIME_DIR=/run/user/{{ deploy_uid }}
       export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ deploy_uid }}/bus
       systemctl --user show-environment
@@ -153,7 +153,7 @@
 - name: Install rootless Docker daemon for deploy user
   ansible.builtin.shell:
     cmd: |
-      set -euo pipefail
+      set -eu
       export HOME={{ deploy_home }}
       export XDG_RUNTIME_DIR=/run/user/{{ deploy_uid }}
       export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ deploy_uid }}/bus
@@ -175,7 +175,7 @@
 - name: Verify rootless Docker server is reachable
   ansible.builtin.shell:
     cmd: |
-      set -euo pipefail
+      set -eu
       export DOCKER_HOST=unix:///run/user/{{ deploy_uid }}/docker.sock
       export XDG_RUNTIME_DIR=/run/user/{{ deploy_uid }}
       docker version --format '{{ '{{' }}.Server.Version{{ '}}' }}'
