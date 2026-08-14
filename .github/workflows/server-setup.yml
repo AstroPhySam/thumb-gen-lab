@@ -2,6 +2,15 @@ name: Server Setup
 
 on:
   workflow_dispatch:
+    inputs:
+      ssh_user:
+        description: "root for first bootstrap, deploy once hardened"
+        required: true
+        default: root
+        type: choice
+        options:
+          - root
+          - deploy
 
 permissions:
   contents: read
@@ -29,4 +38,4 @@ jobs:
         uses: ./.github/actions/ansible-run
         with:
           playbook: ansible/setup.yml
-          ssh_user: root
+          ssh_user: ${{ inputs.ssh_user }}
