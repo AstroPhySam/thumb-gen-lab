@@ -127,7 +127,8 @@ resource "aws_instance" "app" {
 }
 
 resource "aws_s3_bucket" "originals" {
-  bucket = "${var.bucket_prefix}-originals-${data.aws_caller_identity.current.account_id}"
+  bucket        = "${var.bucket_prefix}-originals-${data.aws_caller_identity.current.account_id}"
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_versioning" "originals" {
@@ -156,7 +157,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "originals" {
 }
 
 resource "aws_s3_bucket" "thumbnails" {
-  bucket = "${var.bucket_prefix}-thumbnails-${data.aws_caller_identity.current.account_id}"
+  bucket        = "${var.bucket_prefix}-thumbnails-${data.aws_caller_identity.current.account_id}"
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_versioning" "thumbnails" {
