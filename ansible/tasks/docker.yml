@@ -10,11 +10,22 @@
       - uidmap
       - fuse-overlayfs
       - dbus-user-session
-      - awscli
+      - curl
       - git
     state: present
     update_cache: true
     cache_valid_time: 3600
+
+- name: Install AWS CLI v2 via official installer (no awscli apt package on Noble)
+  ansible.builtin.shell:
+    cmd: |
+      set -eu
+      curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+      python3 -m zipfile -e /tmp/awscliv2.zip /tmp/awscliv2
+      /tmp/awscliv2/aws/install
+  args:
+    creates: /usr/local/bin/aws
+  register: awscli_install
 
 - name: Stop and disable rootful Docker service
   ansible.builtin.systemd:
