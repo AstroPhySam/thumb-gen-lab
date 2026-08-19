@@ -10,6 +10,7 @@
       - uidmap
       - fuse-overlayfs
       - dbus-user-session
+      - acl
       - curl
       - git
     state: present
