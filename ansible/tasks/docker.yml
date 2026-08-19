@@ -28,6 +28,10 @@
     creates: /usr/local/bin/aws
   register: awscli_install
 
+- name: Make AWS CLI tree world-executable for the deploy user
+  ansible.builtin.command: chmod -R a+rX /usr/local/aws-cli
+  changed_when: false
+
 - name: Stop and disable rootful Docker service
   ansible.builtin.systemd:
     name: docker
