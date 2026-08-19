@@ -31,5 +31,5 @@ jobs:
       - name: Run Ansible (deploy)
         uses: ./.github/actions/ansible-run
         with:
-          playbook: ansible/deploy.yml
+          playbook: ansible/deploy.civo.yml
           ssh_user: deploy

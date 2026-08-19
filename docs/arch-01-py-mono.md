@@ -12,22 +12,12 @@ GET /api/events/{id}  -> SSE stream  (queued / processing / done / failed)
 GET /api/download/{id}-> on-the-fly ZIP of the 3 thumbnails
 ```
 
-Everything runs locally with Docker Compose (API + Worker + Redis + MinIO) and was verified
-end-to-end with a ~0.6–0.8s upload-to-done turnaround.
-
 ---
 
-## Repository layout
+## Repository layout (application code)
 
 ```
-image-thumb-gen-lab/
-├── docker-compose.dev.yml  # local dev: api + worker + minio + redis (ports published)
-├── docker-compose.prod.yml # production: + Caddy TLS, ports closed, secrets required
-├── Caddyfile               # reverse proxy + static frontend for the prod stack
-├── .env                     # gitignored secrets (MinIO root user/password)
-├── .env.example             # committed template
-├── .gitignore
-├── py-mono/                 # the Python monolith (uv project, Python 3.12)
+py-mono/                 # the Python monolith (uv project, Python 3.12)
 │   ├── Dockerfile           # python:3.12-slim + uv, same image for API & worker
 │   ├── pyproject.toml       # fastapi, celery, redis, minio, pillow, pydantic-settings
 │   ├── uv.lock
@@ -46,7 +36,7 @@ image-thumb-gen-lab/
 │           ├── job_store.py     # JobStore: job hash + TTL
 │           ├── events.py        # EventBroker: publish + SSE stream generator
 │           └── storage.py       # MinioStorage: buckets, originals, thumbnails
-└── frontend/                # vanilla HTML/CSS/JS test page (separate, no build step)
+frontend/                # vanilla HTML/CSS/JS test page (separate, no build step)
     ├── index.html
     ├── config.js
     ├── serve.py             # for simple development server to test locally
@@ -71,7 +61,7 @@ with fakes (no Redis/MinIO/Celery imports inside `services/`).
 | **API**            | FastAPI (async, uvicorn) | Ingestion layer: upload, status, SSE, ZIP download    |
 | **Worker**         | Celery (prefork)         | CPU-bound image processing (Pillow)                   |
 | **Broker / state** | Redis                    | Task queue, result backend, job hashes, pubsub events |
-| **Storage**        | MinIO                    | `originals` and `thumbnails` object buckets           |
+| **Storage**        | MinIO / S3-compatible    | `originals` and `thumbnails` object buckets           |
 | **Frontend**       | Vanilla HTML/CSS/JS      | Test page consuming upload + SSE + download           |
 
 ---
@@ -110,7 +100,7 @@ completion still receives the terminal `done`/`failed` event.
 
 ---
 
-## Storage layout (MinIO)
+## Storage layout
 
 ```
 originals/{job_id}/{filename}        # uploaded source image
@@ -124,6 +114,8 @@ thumbnails/{job_id}/{size}w.jpg      # 3 thumbnails: 1280w, 640w, 320w
 - Buckets are auto-created at API startup (`ensure_buckets`).
 - The ZIP is built **on the fly** at download time from the 3 thumbnail objects — no ZIP is
   ever persisted. Upload and download both stream (spooled) to bound memory use.
+- Storage is S3-compatible: the `MinioStorage` adapter works against MinIO or any S3 API
+  (e.g. AWS S3), switching only via `MINIO_ENDPOINT`/`MINIO_REGION` config.
 
 ---
 
@@ -136,28 +128,16 @@ thumbnails/{job_id}/{size}w.jpg      # 3 thumbnails: 1280w, 640w, 320w
 
 ---
 
-## Orchestration (docker-compose)
+## Runtime config & reliability
 
-- **api** — `uvicorn src.api:app` on `:8000`
-- **worker** — `celery -A src.celery_app.celery_app worker --concurrency=2`
-- **minio** — server on `:9000`, console on `:9001`, volume `minio-data`
-- **redis** — `redis:8.6-alpine` (append-only), volume `redis-data`
-
-All on the `thumbnail` bridge network with healthcheck-gated `depends_on`. `api` and
-`worker` share one Docker image (built from `py-mono/` with uv) and differ only by command,
-so both processes see identical config.
-
-The shared API/worker environment map is defined once as an `x-app-env` YAML anchor and
-merged into both services.
-
-**Celery reliability config:** `task_acks_late`, `task_reject_on_worker_lost` and
-`worker_prefetch_multiplier=1` (no duplicate/poisoned work on worker loss), `result_expires`
-(1h). The worker retries transient failures with exponential backoff — up to `MAX_RETRIES`
-(env-configurable, default 3) — before marking a job `failed`.
-
-Configuration flows from a gitignored root `.env` (MinIO credentials) into compose, with
-sane in-network defaults for Redis/MinIO endpoints. The shared `x-app-env` anchor also
-carries `MAX_UPLOAD_MB`, `JOB_TTL_HOURS`, and `MAX_RETRIES`.
+- The API and worker share one Docker image and differ only by command, so both processes
+  see identical configuration from the same env map (`REDIS_URL`, MinIO endpoint/keys,
+  `THUMB_SIZES`, `THUMB_QUALITY`, `MAX_UPLOAD_MB`, `JOB_TTL_HOURS`, `MAX_RETRIES`,
+  `CORS_ORIGINS`), sourced from a gitignored root `.env`.
+- **Celery reliability config:** `task_acks_late`, `task_reject_on_worker_lost` and
+  `worker_prefetch_multiplier=1` (no duplicate/poisoned work on worker loss), `result_expires`
+  (1h). The worker retries transient failures with exponential backoff — up to `MAX_RETRIES`
+  (env-configurable, default 3) — before marking a job `failed`.
 
 ---
 
@@ -172,44 +152,10 @@ A zero-build vanilla page served by any static server:
 - On `done`, a **Download ZIP** button appears and fetches the ZIP blob.
 
 API base URL is env-driven: `js/app.js` reads `window.API_BASE_URL` (see `config.js`).
-In production `config.js` ships with `""` (same-origin behind Caddy); in local dev the
-`serve.py` dev server injects it from `API_BASE_URL` (default `http://localhost:8000`).
+In production `config.js` ships with `""` (same-origin behind a reverse proxy); in local dev
+the `serve.py` dev server injects it from `API_BASE_URL` (default `http://localhost:8000`).
 
 ---
-
-## How to run (local dev)
-
-```powershell
-# 1. Start services (Docker Desktop running)
-docker compose -f docker-compose.dev.yml up -d --build
-
-# 2. Serve the frontend (injects config.js from API_BASE_URL)
-python frontend/serve.py   # open http://localhost:8080
-
-# 3. (or) test via curl
-curl -F "file=@image.jpg" http://localhost:8000/api/upload
-curl -N http://localhost:8000/api/events/<job_id>
-curl -o thumbs.zip http://localhost:8000/api/download/<job_id>
-```
-
-Production runs the same stack plus Caddy for TLS and static serving:
-
-```powershell
-$env:DOMAIN = "thumbs.example.com"
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
-Stop: `docker compose -f docker-compose.dev.yml down` (keeps data); wipe:
-`docker compose -f docker-compose.dev.yml down -v`.
-MinIO console: `http://localhost:9001` (login from `.env`, default `minioadmin`/`minioadmin`).
-
----
-
-## Current status
-
-- End-to-end flow verified working (upload → SSE → ZIP download).
-- Typical turnaround ~0.6–0.8s locally.
-- Git repo initialized, no commits yet.
 
 ## Possible next steps
 

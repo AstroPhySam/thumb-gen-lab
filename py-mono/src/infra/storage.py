@@ -11,6 +11,7 @@ class MinioStorage:
             self._settings.MINIO_ENDPOINT,
             access_key=self._settings.MINIO_ACCESS_KEY,
             secret_key=self._settings.MINIO_SECRET_KEY,
+            region=self._settings.MINIO_REGION,
             secure=self._settings.MINIO_SECURE,
         )
 
@@ -20,7 +21,7 @@ class MinioStorage:
             self._settings.MINIO_BUCKET_THUMBNAILS,
         ):
             if not self._client.bucket_exists(bucket):
-                self._client.make_bucket(bucket)
+                self._client.make_bucket(bucket, region=self._settings.MINIO_REGION)
 
     @staticmethod
     def original_key(job_id: str, filename: str) -> str:

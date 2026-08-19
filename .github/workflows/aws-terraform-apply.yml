@@ -1,0 +1,53 @@
+name: AWS Terraform Apply
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/aws
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      TF_VAR_domain: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Write SSH public key
+        run: echo "${{ secrets.SSH_PUBLIC_KEY }}" > "$RUNNER_TEMP/thumbgen-aws.pub"
+
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform apply
+        run: terraform apply -auto-approve
+        env:
+          TF_VAR_ssh_public_key_path: ${{ runner.temp }}/thumbgen-aws.pub
+          TF_VAR_ssh_private_key_path: ${{ runner.temp }}/thumbgen-aws
+
+      - name: Record AWS outputs as repo variables/secrets
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          REGION="${AWS_REGION:-ap-south-1}"
+          gh variable set AWS_INSTANCE_IP --repo "$GH_REPO" --body "$(terraform output -raw instance_public_ip)"
+          gh variable set ECR_REGISTRY --repo "$GH_REPO" --body "$(terraform output -raw ecr_registry_url)"
+          gh variable set MINIO_REGION --repo "$GH_REPO" --body "$REGION"
+          gh variable set MINIO_BUCKET_ORIGINALS --repo "$GH_REPO" --body "$(terraform output -raw originals_bucket)"
+          gh variable set MINIO_BUCKET_THUMBNAILS --repo "$GH_REPO" --body "$(terraform output -raw thumbnails_bucket)"
+          gh secret set MINIO_ACCESS_KEY --repo "$GH_REPO" --body "$(terraform output -raw app_iam_access_key)"
+          gh secret set MINIO_SECRET_KEY --repo "$GH_REPO" --body "$(terraform output -raw app_iam_secret)"
+          gh secret set AWS_ROLE_ARN --repo "$GH_REPO" --body "$(terraform output -raw gh_actions_role_arn)"

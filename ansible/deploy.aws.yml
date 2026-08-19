@@ -1,9 +1,9 @@
 ---
-- name: Deploy thumbgen stack
+- name: Deploy thumbgen stack on AWS
   hosts: thumbgen
   vars:
     deploy_dir: /opt/thumbgen
-    compose_file: docker-compose.prod.yml
+    compose_file: docker-compose.prod.aws.yml
     healthz_url: "http://{{ domain }}/healthz"
     git_repo: https://github.com/AstroPhySam/thumb-gen-lab.git
     git_repo_clone: >-
@@ -12,5 +12,5 @@
          else 'https://github.com/AstroPhySam/thumb-gen-lab.git' }}
 
   tasks:
-    - name: Deploy the thumbgen application stack
-      ansible.builtin.include_tasks: tasks/deploy.yml
+    - name: Deploy the thumbgen application stack on AWS
+      ansible.builtin.include_tasks: tasks/deploy.aws.yml

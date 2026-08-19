@@ -1,0 +1,16 @@
+---
+- name: Deploy thumbgen stack
+  hosts: thumbgen
+  vars:
+    deploy_dir: /opt/thumbgen
+    compose_file: docker-compose.prod.civo.yml
+    healthz_url: "http://{{ domain }}/healthz"
+    git_repo: https://github.com/AstroPhySam/thumb-gen-lab.git
+    git_repo_clone: >-
+      {{ 'https://x-access-token:' ~ git_repo_token ~ '@github.com/AstroPhySam/thumb-gen-lab.git'
+         if (git_repo_token | default('') | length > 0)
+         else 'https://github.com/AstroPhySam/thumb-gen-lab.git' }}
+
+  tasks:
+    - name: Deploy the thumbgen application stack
+      ansible.builtin.include_tasks: tasks/deploy.civo.yml

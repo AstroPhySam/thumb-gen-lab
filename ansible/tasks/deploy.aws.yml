@@ -1,0 +1,102 @@
+---
+- name: Resolve deploy user UID for rootless Docker socket
+  ansible.builtin.command: id -u
+  changed_when: false
+  register: deploy_uid_cmd
+
+- name: Set rootless Docker host fact
+  ansible.builtin.set_fact:
+    docker_host: "unix:///run/user/{{ deploy_uid_cmd.stdout }}/docker.sock"
+
+- name: Clone application repository
+  ansible.builtin.git:
+    repo: "{{ git_repo_clone }}"
+    dest: "{{ deploy_dir }}"
+    version: main
+    force: true
+
+- name: Strip token from origin remote
+  ansible.builtin.command: "git remote set-url origin {{ git_repo }}"
+  args:
+    chdir: "{{ deploy_dir }}"
+  when: git_repo_token | default('') | length > 0
+
+- name: Render production .env from secrets
+  ansible.builtin.template:
+    src: templates/env.aws.j2
+    dest: "{{ deploy_dir }}/.env"
+    mode: "0600"
+
+- name: Get ECR login password with app IAM credentials
+  ansible.builtin.shell: aws ecr get-login-password
+  changed_when: false
+  environment:
+    AWS_ACCESS_KEY_ID: "{{ minio_access_key }}"
+    AWS_SECRET_ACCESS_KEY: "{{ minio_secret_key }}"
+    AWS_DEFAULT_REGION: "{{ minio_region }}"
+  register: ecr_login_password
+
+- name: Login to ECR
+  community.docker.docker_login:
+    registry_url: "{{ ecr_registry }}"
+    username: AWS
+    password: "{{ ecr_login_password.stdout }}"
+    reauthorize: true
+  environment:
+    DOCKER_HOST: "{{ docker_host }}"
+
+- name: Deploy stack via rootless Docker (pull + up, force-recreate)
+  community.docker.docker_compose_v2:
+    project_src: "{{ deploy_dir }}"
+    files: "{{ compose_file }}"
+    build: never
+    state: present
+    pull: always
+    recreate: always
+  environment:
+    DOCKER_HOST: "{{ docker_host }}"
+
+- name: Show container status
+  ansible.builtin.command: "docker compose -f {{ compose_file }} ps"
+  args:
+    chdir: "{{ deploy_dir }}"
+  environment:
+    DOCKER_HOST: "{{ docker_host }}"
+  register: stack_status
+  changed_when: false
+
+- name: Print container status
+  ansible.builtin.debug:
+    var: stack_status.stdout
+
+- name: Wait for health endpoint
+  ansible.builtin.uri:
+    url: "{{ healthz_url }}"
+    method: GET
+    status_code: 200
+    timeout: 5
+  register: health
+  until: health.status is defined and health.status == 200
+  retries: 24
+  delay: 5
+  ignore_errors: true
+
+- name: Collect diagnostic logs
+  ansible.builtin.command: "docker compose -f {{ compose_file }} logs --tail=100"
+  args:
+    chdir: "{{ deploy_dir }}"
+  environment:
+    DOCKER_HOST: "{{ docker_host }}"
+  register: diag_logs
+  changed_when: false
+  when: health.status is defined and health.status != 200
+
+- name: Print diagnostic logs
+  ansible.builtin.debug:
+    var: diag_logs.stdout
+  when: health.status is defined and health.status != 200
+
+- name: Fail if stack is unhealthy
+  ansible.builtin.fail:
+    msg: "Health endpoint {{ healthz_url }} did not return 200"
+  when: health.status is defined and health.status != 200

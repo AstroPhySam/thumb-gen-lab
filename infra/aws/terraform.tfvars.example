@@ -1,0 +1,7 @@
+region               = "ap-south-1"
+instance_hostname    = "thumbgen"
+instance_size        = "t3.micro"
+bucket_prefix        = "thumbgen"
+ssh_public_key_path  = "/absolute/path/to/thumbgen-aws.pub"
+ssh_private_key_path = "/absolute/path/to/thumbgen-aws"
+domain               = ""

@@ -23,7 +23,7 @@
 
 - name: Render production .env from secrets
   ansible.builtin.template:
-    src: templates/env.j2
+    src: templates/env.civo.j2
     dest: "{{ deploy_dir }}/.env"
     mode: "0600"
 

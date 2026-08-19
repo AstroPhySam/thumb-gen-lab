@@ -1,0 +1,39 @@
+name: AWS App Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy application stack on AWS
+    runs-on: ubuntu-latest
+    env:
+      INSTANCE_IP: ${{ vars.AWS_INSTANCE_IP }}
+      DOMAIN: ${{ vars.DOMAIN }}
+      MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+      MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+      MINIO_REGION: ${{ vars.MINIO_REGION }}
+      MINIO_BUCKET_ORIGINALS: ${{ vars.MINIO_BUCKET_ORIGINALS }}
+      MINIO_BUCKET_THUMBNAILS: ${{ vars.MINIO_BUCKET_THUMBNAILS }}
+      ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+      GIT_REPO_TOKEN: ${{ secrets.GIT_REPO_TOKEN }}
+      SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fail if instance IP is not set
+        if: env.INSTANCE_IP == ''
+        run: |
+          echo "::error::AWS_INSTANCE_IP is not set. Run 'AWS Terraform Apply' first so it records the instance IP."
+          exit 1
+
+      - name: Run Ansible (deploy.aws)
+        uses: ./.github/actions/ansible-run
+        with:
+          playbook: ansible/deploy.aws.yml
+          ssh_user: deploy

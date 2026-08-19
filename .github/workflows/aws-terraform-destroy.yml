@@ -1,4 +1,4 @@
-name: Terraform Destroy
+name: AWS Terraform Destroy
 
 on:
   workflow_dispatch:
@@ -17,11 +17,12 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: infra
+        working-directory: infra/aws
     env:
-      CIVO_TOKEN: ${{ secrets.CIVO_TOKEN }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      TF_VAR_domain: ""
 
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +39,7 @@ jobs:
           fi
 
       - name: Write SSH public key
-        run: echo "${{ secrets.SSH_PUBLIC_KEY }}" > "$RUNNER_TEMP/civo-thumbgen.pub"
+        run: echo "${{ secrets.SSH_PUBLIC_KEY }}" > "$RUNNER_TEMP/thumbgen-aws.pub"
 
       - name: Terraform init
         run: terraform init
@@ -46,11 +47,19 @@ jobs:
       - name: Terraform destroy
         run: terraform destroy -auto-approve
         env:
-          TF_VAR_ssh_public_key_path: ${{ runner.temp }}/civo-thumbgen.pub
-          TF_VAR_ssh_private_key_path: ${{ runner.temp }}/civo-thumbgen
+          TF_VAR_ssh_public_key_path: ${{ runner.temp }}/thumbgen-aws.pub
+          TF_VAR_ssh_private_key_path: ${{ runner.temp }}/thumbgen-aws
 
-      - name: Clear instance IP variable for Deploy workflow
+      - name: Clear AWS repo variables/secrets
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          gh variable delete INSTANCE_IP --repo "${{ github.repository }}" || true
+          gh variable delete AWS_INSTANCE_IP --repo "$GH_REPO" || true
+          gh variable delete ECR_REGISTRY --repo "$GH_REPO" || true
+          gh variable delete MINIO_REGION --repo "$GH_REPO" || true
+          gh variable delete MINIO_BUCKET_ORIGINALS --repo "$GH_REPO" || true
+          gh variable delete MINIO_BUCKET_THUMBNAILS --repo "$GH_REPO" || true
+          gh secret delete MINIO_ACCESS_KEY --repo "$GH_REPO" || true
+          gh secret delete MINIO_SECRET_KEY --repo "$GH_REPO" || true
+          gh secret delete AWS_ROLE_ARN --repo "$GH_REPO" || true

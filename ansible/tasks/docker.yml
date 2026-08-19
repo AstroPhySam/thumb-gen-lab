@@ -10,6 +10,8 @@
       - uidmap
       - fuse-overlayfs
       - dbus-user-session
+      - awscli
+      - git
     state: present
     update_cache: true
     cache_valid_time: 3600
@@ -176,13 +178,6 @@
 - name: Print rootless Docker server version
   ansible.builtin.debug:
     msg: "Rootless Docker server version: {{ rootless_version.stdout }}"
-
-- name: Install git (needed by app-deploy clone)
-  ansible.builtin.apt:
-    name: git
-    state: present
-    update_cache: true
-    cache_valid_time: 3600
 
 - name: Ensure app directory exists and is owned by deploy user
   ansible.builtin.file:

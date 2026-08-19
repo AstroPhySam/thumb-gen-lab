@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     MINIO_ENDPOINT: str = "localhost:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"
+    MINIO_REGION: str = "us-east-1"
     MINIO_SECURE: bool = False
     MINIO_BUCKET_ORIGINALS: str = "originals"
     MINIO_BUCKET_THUMBNAILS: str = "thumbnails"

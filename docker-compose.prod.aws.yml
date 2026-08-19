@@ -1,0 +1,122 @@
+x-app-env: &app-env
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+  MINIO_REGION: ${MINIO_REGION}
+  MINIO_SECURE: ${MINIO_SECURE}
+  MINIO_BUCKET_ORIGINALS: ${MINIO_BUCKET_ORIGINALS:-originals}
+  MINIO_BUCKET_THUMBNAILS: ${MINIO_BUCKET_THUMBNAILS:-thumbnails}
+  THUMB_SIZES: "[1280,640,320]"
+  THUMB_QUALITY: "85"
+  MAX_UPLOAD_MB: "50"
+  JOB_TTL_HOURS: "24"
+  MAX_RETRIES: "3"
+  CORS_ORIGINS: "[]"
+
+services:
+  api:
+    image: ${ECR_REGISTRY}/thumbgen-api:latest
+    command: uvicorn src.api:app --host 0.0.0.0 --port 8000
+    environment:
+      <<: *app-env
+    networks:
+      - thumbnail
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+    restart: unless-stopped
+
+  worker:
+    image: ${ECR_REGISTRY}/thumbgen-worker:latest
+    command: celery -A src.celery_app.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      <<: *app-env
+    networks:
+      - thumbnail
+    depends_on:
+      redis:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.6-alpine
+    container_name: thumbgen-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - thumbnail
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.11.4-alpine
+    container_name: thumbgen-caddy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN is required}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./frontend:/srv/www:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - thumbnail
+    depends_on:
+      api:
+        condition: service_healthy
+
+networks:
+  thumbnail:
+    driver: bridge
+
+volumes:
+  redis-data:
+  caddy-data:
+  caddy-config:
