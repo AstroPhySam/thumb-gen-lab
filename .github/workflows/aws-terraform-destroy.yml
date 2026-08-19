@@ -44,6 +44,26 @@ jobs:
       - name: Terraform init
         run: terraform init
 
+      - name: Empty S3 buckets (objects + all versions) before destroy
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+          for BUCKET in "thumbgen-originals-${ACCOUNT_ID}" "thumbgen-thumbnails-${ACCOUNT_ID}"; do
+            echo "Emptying ${BUCKET}"
+            if ! aws s3api head-bucket --bucket "$BUCKET" >/dev/null 2>&1; then
+              echo "Bucket ${BUCKET} not found; skipping"
+              continue
+            fi
+            aws s3api list-object-versions \
+              --bucket "$BUCKET" \
+              --query '{V:Versions[].{K:Key,V:VersionId},D:DeleteMarkers[].{K:Key,V:VersionId}}' \
+              --output json 2>/dev/null \
+            | jq -r '(.V + .D)[] | "\(.K)\t\(.V)"' \
+            | while IFS=$'\t' read -r KEY VERSION_ID; do
+                aws s3api delete-object --bucket "$BUCKET" --key "$KEY" --version-id "$VERSION_ID" >/dev/null
+              done || true
+          done
+
       - name: Terraform destroy
         run: terraform destroy -auto-approve
         env:
