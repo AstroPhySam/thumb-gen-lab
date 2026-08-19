@@ -21,7 +21,9 @@
   ansible.builtin.shell:
     cmd: |
       set -eu
+      umask 022
       curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+      rm -rf /tmp/awscliv2
       python3 -m zipfile -e /tmp/awscliv2.zip /tmp/awscliv2
       bash /tmp/awscliv2/aws/install
   args:
@@ -29,8 +31,25 @@
   register: awscli_install
 
 - name: Make AWS CLI tree world-executable for the deploy user
-  ansible.builtin.command: chmod -R a+rX /usr/local/aws-cli
+  ansible.builtin.command: chmod -R a+rx /usr/local/aws-cli
   changed_when: false
+
+- name: Diagnose aws CLI resolution and permissions
+  ansible.builtin.shell: |
+    set +e
+    echo "PATH=$(command -v aws)"
+    AWSPATH="$(command -v aws)"
+    echo "RESOLVED=$(readlink -f "$AWSPATH")"
+    stat -c 'STAT %A %U:%G %n' "$(readlink -f "$AWSPATH")" 2>&1
+  become: true
+  become_user: "{{ deploy_user }}"
+  changed_when: false
+  ignore_errors: true
+  register: awscli_diag
+
+- name: Print AWS CLI diagnostics
+  ansible.builtin.debug:
+    var: awscli_diag.stdout
 
 - name: Verify deploy user can execute AWS CLI
   ansible.builtin.command: aws --version
