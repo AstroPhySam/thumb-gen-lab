@@ -44,7 +44,7 @@ ECR repos, the S3 buckets, and the app IAM user — so there is no chicken-and-e
 | secret   | `AWS_ACCESS_KEY_ID`      | bootstrap user key (terraform workflows)                        |
 | secret   | `AWS_SECRET_ACCESS_KEY`  | bootstrap user secret                                           |
 | secret   | `SSH_PUBLIC_KEY`         | public admin key → EC2 key pair + `admin` user                  |
-| secret   | `SSH_PRIVATE_KEY`        | private admin key (root/bootstrap SSH)                          |
+| secret   | `SSH_PRIVATE_KEY`        | private admin key (`ubuntu` bootstrap / `admin` SSH)            |
 | secret   | `DEPLOY_SSH_PUBLIC_KEY`  | public deploy key → `deploy`'s authorized_keys                  |
 | secret   | `DEPLOY_SSH_PRIVATE_KEY` | private deploy key (app deploy SSH)                             |
 | secret   | `GH_PAT`                 | fine-grained PAT with **Actions variables/secrets: read/write** |
@@ -69,13 +69,14 @@ Run these workflows in order from the Actions tab:
 
 1. **`aws-terraform-plan`** — `terraform fmt/init/validate/plan` (bootstrap keys).
 2. **`aws-terraform-apply`** — `terraform apply -auto-approve`, then writes all vars/secrets above via `gh`.
-3. **`build-push-ecr`** — OIDC → builds `py-mono` → pushes `thumbgen-api`/`thumbgen-worker` to ECR (tagged `sha` + `latest`). Also runs on every push to `main`.
+3. **`build-push-ecr`** — OIDC → builds `py-mono` → pushes `thumbgen-api`/`thumbgen-worker` to ECR (tagged `sha` + `latest`).
 4. **`aws-server-setup`** with `ssh_user = ubuntu` — hardening + rootless Docker + `awscli` (re-runs use `admin`).
 5. **`aws-app-deploy`** — clones the repo to `/opt/thumbgen`, renders the prod `.env` (S3 endpoint/keys, `ECR_REGISTRY`, `DOMAIN`), logs into **ECR** with the app IAM credentials, pulls the images, starts the stack, then health-gates `http://<ip>/healthz`.
 
 ### Ansible specifics (`deploy.aws.yml`)
 
-- `awscli` is installed during server setup; `aws ecr get-login-password` feeds `docker login` using the app IAM keys.
+- AWS CLI **v2** is installed from the official installer during server setup (no `awscli` apt package
+  on Ubuntu 24.04); `aws ecr get-login-password` feeds `docker login` using the app IAM keys.
 - `docker_compose_v2` runs with `build: never`, `pull: always`, `recreate: always`.
 - The `env.aws.j2` template renders `MINIO_ENDPOINT/SECURE/REGION`, `MINIO_ACCESS_KEY/SECRET_KEY`,
   `MINIO_BUCKET_*`, `ECR_REGISTRY`, `DOMAIN`, `CORS_ORIGINS`.
@@ -96,6 +97,7 @@ aws s3 ls s3://<bucket_prefix>-thumbnails-<account_id>/<job_id>/
 
 ## Tear down
 
-`aws-terraform-destroy` with the `confirm` input exactly `DESTROY` — destroys all AWS resources and clears the auto-set vars/secrets.
+`aws-terraform-destroy` with the `confirm` input exactly `DESTROY` — first empties the S3 buckets
+(objects + all versions), then destroys all AWS resources and clears the auto-set vars/secrets.
 
 > See `infra/README.md` for the backend/auth overview and `docs/deploy-civo.md` for the Civo environment.
