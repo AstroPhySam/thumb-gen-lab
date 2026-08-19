@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       ssh_user:
-        description: "root for first bootstrap, admin after hardening"
+        description: "ubuntu for first bootstrap, admin after hardening"
         required: true
-        default: root
+        default: ubuntu
         type: choice
         options:
+          - ubuntu
           - root
           - admin
 

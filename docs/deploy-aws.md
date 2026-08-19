@@ -23,7 +23,7 @@ Internet ──> Security Group (22/80/443) ──> EC2 t3.micro (Ubuntu 24.04, 
 
 1. **AWS account** — `thumbgen-bootstrap` IAM user with `AdministratorAccess` + access key.
 2. **State bucket** `thumbgen-tfstate-017731864396-ap-south-1-an` (region `ap-south-1`, versioning on).
-3. **Two SSH keypairs** — **Admin key** (`aws-server-setup` root/bootstrap) and **Deploy key**
+3. **Two SSH keypairs** — **Admin key** (`aws-server-setup` as `ubuntu`/`admin`) and **Deploy key**
    (`aws-app-deploy` as `deploy`).
 
 ## Auth model
@@ -70,7 +70,7 @@ Run these workflows in order from the Actions tab:
 1. **`aws-terraform-plan`** — `terraform fmt/init/validate/plan` (bootstrap keys).
 2. **`aws-terraform-apply`** — `terraform apply -auto-approve`, then writes all vars/secrets above via `gh`.
 3. **`build-push-ecr`** — OIDC → builds `py-mono` → pushes `thumbgen-api`/`thumbgen-worker` to ECR (tagged `sha` + `latest`). Also runs on every push to `main`.
-4. **`aws-server-setup`** with `ssh_user = root` — hardening + rootless Docker + `awscli` (re-runs use `admin`).
+4. **`aws-server-setup`** with `ssh_user = ubuntu` — hardening + rootless Docker + `awscli` (re-runs use `admin`).
 5. **`aws-app-deploy`** — clones the repo to `/opt/thumbgen`, renders the prod `.env` (S3 endpoint/keys, `ECR_REGISTRY`, `DOMAIN`), logs into **ECR** with the app IAM credentials, pulls the images, starts the stack, then health-gates `http://<ip>/healthz`.
 
 ### Ansible specifics (`deploy.aws.yml`)

@@ -7,7 +7,7 @@ output "instance_public_ip" {
 }
 
 output "ssh_command" {
-  value = "ssh -i ${var.ssh_private_key_path} root@${aws_instance.app.public_ip}"
+  value = "ssh -i ${var.ssh_private_key_path} ubuntu@${aws_instance.app.public_ip}"
 }
 
 output "ecr_registry_url" {
