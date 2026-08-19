@@ -295,7 +295,10 @@ resource "aws_iam_role" "gh_actions" {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           }
           StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:AstroPhySam/thumb-gen-lab:*"
+            "token.actions.githubusercontent.com:sub" = [
+              "repo:AstroPhySam/thumb-gen-lab:*",
+              "repo:AstroPhySam@206302151/thumb-gen-lab@1324942626:*"
+            ]
           }
         }
       }
