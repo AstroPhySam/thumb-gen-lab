@@ -32,6 +32,17 @@
   ansible.builtin.command: chmod -R a+rX /usr/local/aws-cli
   changed_when: false
 
+- name: Verify deploy user can execute AWS CLI
+  ansible.builtin.command: aws --version
+  become: true
+  become_user: "{{ deploy_user }}"
+  changed_when: false
+  register: awscli_check
+
+- name: Print AWS CLI version as deploy user
+  ansible.builtin.debug:
+    msg: "AWS CLI (deploy user): {{ awscli_check.stdout }}"
+
 - name: Stop and disable rootful Docker service
   ansible.builtin.systemd:
     name: docker
