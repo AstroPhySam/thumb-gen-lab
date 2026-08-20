@@ -5,11 +5,11 @@ A **Python monolith** that ingests images, generates three thumbnail sizes with 
 ```
 POST /api/upload  -> FastAPI (save original to MinIO, enqueue task)  -> Redis queue
                                                                           |
-                  Celery worker: download original -> Pillow resize (1280/640/320)
+                     Pillow resize (1280/640/320) <- Celery worker: download original
                      -> upload thumbnails to MinIO -> publish status via Redis pubsub
                                                                           |
-GET /api/events/{id}  -> SSE stream  (queued / processing / done / failed)
-GET /api/download/{id}-> on-the-fly ZIP of the 3 thumbnails
+GET /api/events/{id}   -> SSE stream  (queued / processing / done / failed)
+GET /api/download/{id} -> on-the-fly ZIP of the 3 thumbnails
 ```
 
 ---
@@ -44,13 +44,12 @@ frontend/                # vanilla HTML/CSS/JS test page (separate, no build ste
     └── js/app.js
 ```
 
-`frontend/` is intentionally kept **outside** `py-mono` so the project can adopt other
+`frontend/` is intentionally kept outside `py-mono` so the project can adopt other
 architecture patterns (e.g. dedicated `api-python/`, `worker-rust/`, `notify-rust/`) later.
 
 **Layering:** routes (`api.py`) only parse HTTP and delegate to `services/` (pure business
 logic) which talk to `infra/` adapters (Redis, MinIO, Celery). Everything is
-constructor-injected via the `deps.py` composition root, so services can be unit-tested
-with fakes (no Redis/MinIO/Celery imports inside `services/`).
+constructor-injected (Dependency Injection Pattern) via the `deps.py` composition root, so services can be unit-tested with mocks (no Redis/MinIO/Celery imports inside `services/`).
 
 ---
 
@@ -112,7 +111,7 @@ thumbnails/{job_id}/{size}w.jpg      # 3 thumbnails: 1280w, 640w, 320w
   phone photos aren't rotated.
 - Uploaded filenames are sanitized to a safe basename before use as object keys.
 - Buckets are auto-created at API startup (`ensure_buckets`).
-- The ZIP is built **on the fly** at download time from the 3 thumbnail objects — no ZIP is
+- The ZIP is built **on the fly** at download time from the 3 thumbnail objects. No ZIP is
   ever persisted. Upload and download both stream (spooled) to bound memory use.
 - Storage is S3-compatible: the `MinioStorage` adapter works against MinIO or any S3 API
   (e.g. AWS S3), switching only via `MINIO_ENDPOINT`/`MINIO_REGION` config.
@@ -121,9 +120,9 @@ thumbnails/{job_id}/{size}w.jpg      # 3 thumbnails: 1280w, 640w, 320w
 
 ## Job state (Redis)
 
-- **Hash** `job:{job_id}` — `status`, `filename`, optional `download_url` / `error`. Expired
+- **Hash** `job:{job_id}` : `status`, `filename`, optional `download_url` / `error`. Expired
   after `JOB_TTL_HOURS` (default 24h) so Redis doesn't grow unboundedly.
-- **Channel** `events:{job_id}` — pubsub events consumed by the SSE endpoint.
+- **Channel** `events:{job_id}` : pubsub events consumed by the SSE endpoint.
 - Celery uses Redis as both **broker** and **result backend**.
 
 ---
@@ -136,8 +135,8 @@ thumbnails/{job_id}/{size}w.jpg      # 3 thumbnails: 1280w, 640w, 320w
   `CORS_ORIGINS`), sourced from a gitignored root `.env`.
 - **Celery reliability config:** `task_acks_late`, `task_reject_on_worker_lost` and
   `worker_prefetch_multiplier=1` (no duplicate/poisoned work on worker loss), `result_expires`
-  (1h). The worker retries transient failures with exponential backoff — up to `MAX_RETRIES`
-  (env-configurable, default 3) — before marking a job `failed`.
+  (1h). The worker retries transient failures with exponential backoff, up to `MAX_RETRIES`
+  (env-configurable, default 3), before marking a job `failed`.
 
 ---
 

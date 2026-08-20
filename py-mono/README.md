@@ -1,16 +1,14 @@
-# py-mono
+# Python Monolith
 
-The application: a **Python monolith** that ingests images, generates three thumbnail
-sizes with a Celery worker, and delivers them to the user as a ZIP through an SSE-backed
-live status flow.
+Ingests images, generates three thumbnail sizes with a Celery worker, and delivers them to the user as a ZIP through an SSE-backed live status flow.
 
-FastAPI + Celery + Redis + MinIO (S3-compatible) + Pillow, managed as a `uv` project
+FastAPI + Celery + Redis + MinIO (S3-compatible) + Pillow, managed as a uv project
 (Python 3.12).
 
 ```
 POST /api/upload  -> FastAPI (save original to MinIO, enqueue task)  -> Redis queue
                                                                           |
-                  Celery worker: download original -> Pillow resize (1280/640/320)
+                     Pillow resize (1280/640/320) <- Celery worker: download original
                      -> upload thumbnails to MinIO -> publish status via Redis pubsub
                                                                           |
 GET /api/events/{id}  -> SSE stream  (queued / processing / done / failed)
@@ -62,7 +60,7 @@ Stop: `docker compose -f docker-compose.dev.yml down` (keeps data); wipe:
 
 ## Deploy
 
-The same image runs in production via Docker Compose — on Civo (MinIO inside the stack)
+The same image runs in production via Docker Compose on Civo (MinIO inside the stack)
 or AWS (native S3 + ECR). See the runbooks:
 
 - [`docs/deploy-civo.md`](../docs/deploy-civo.md)
